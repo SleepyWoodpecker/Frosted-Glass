@@ -1,0 +1,108 @@
+package main
+
+import (
+	"bytes"
+	"fmt"
+	"log"
+	"unsafe"
+
+	"go.bug.st/serial"
+)
+
+const PORT_NAME = "/dev/cu.usbserial-0001"
+const MSG_SIZE = 150
+
+const (
+    ENTER = iota
+    EXIT
+    PANIC
+)
+
+type TraceFunctionGeneralEntry struct {
+	TraceType   uint8
+    CoreId      uint8
+    Timestamp   uint32
+    Trace_id    uint32
+}
+
+type TraceFunctionEnterEntry struct {
+    TraceFunctionGeneralEntry
+    ValueTypes  uint8
+    ArgCount    uint8
+    FuncArgs    [4]uint32
+    FuncName    [16]byte
+}
+
+type TraceFunctionExitEntry struct {
+    TraceFunctionGeneralEntry
+    ValueTypes  uint8
+    _           uint8
+    ReturnVal   uint32
+    _           [3]uint32
+    FuncName    [16]byte
+}
+
+func main() {
+	mode := &serial.Mode{
+		BaudRate: 115200,
+	}
+
+	port, err := serial.Open(PORT_NAME, mode)
+	if err != nil {
+		log.Fatalf("Unable to open serial port %v\n", err)
+	}
+    defer port.Close()
+
+	port.ResetInputBuffer()
+	sync(port)
+
+	for {
+		count := 0
+		tempBuf := [MSG_SIZE]byte{}
+
+		for count < MSG_SIZE {
+			n, err := port.Read(tempBuf[count:])
+			if err != nil {
+				fmt.Printf("error in reader, %v\n", err)
+				sync(port)
+			}
+			count += n
+		}
+
+        if !bytes.Equal(tempBuf[len(tempBuf) - 2 : ], []byte{'\r', '\n'}) {
+            fmt.Printf("Control sequence at the end incorrect, %v\n", tempBuf[len(tempBuf) - 2 : ])
+            continue
+        }
+
+        // try to access the first byte of the message
+        // which would give you information on what type of entry it is
+        typePointer := unsafe.Pointer(&tempBuf[0])
+        
+        switch *(*uint8)(typePointer) {
+        case ENTER:
+            fmt.Println("ENTER")
+        case EXIT:
+            fmt.Println("EXIT")
+        case PANIC:
+            fmt.Println("PANIC")
+        default:
+            fmt.Println("Unsure")
+        }
+	}
+}
+
+func sync(p serial.Port) {
+	twoBytes := [2]byte{ 0x0, 0x0 }
+	oneByte := [1]byte{}
+
+	for !bytes.Equal(twoBytes[:], []byte{'\r', '\n'}) {
+		_, err := p.Read(oneByte[:])
+		if err != nil {
+			fmt.Printf("Error while resyncing serial port %v", err)
+		}
+
+		// update the two byte sequence
+		twoBytes[0] = twoBytes[1]
+		twoBytes[1] = oneByte[0]
+	}
+}
