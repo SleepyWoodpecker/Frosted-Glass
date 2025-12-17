@@ -3,6 +3,8 @@ package main
 import (
 	"RP-UCLA/backend-reader/internal/processing"
 	"RP-UCLA/backend-reader/internal/rSerial"
+	"fmt"
+	"net/http"
 )
 
 const (
@@ -19,8 +21,32 @@ func main() {
 	port := rSerial.NewRSerial(PORT_NAME, 115200, STOP_SEQUENCE[:], messageQueue)
 	defer port.Close()
 
-	processor := processing.NewProcessor(PORT_NAME, messageQueue)
+	socketManager := processing.NewSocketManager()
+
+	processor := processing.NewProcessor(PORT_NAME, messageQueue, socketManager)
+
+	http.HandleFunc("/data", func(w http.ResponseWriter, r *http.Request) {
+		conn, err := processing.Upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			fmt.Printf("could not create a new WS connection %v", err)
+			return
+		}
+
+		socketManager.Register(conn)
+		fmt.Println("New connection created")
+
+		for {
+			if _, _, err := conn.NextReader(); err != nil {
+				socketManager.Unregister(conn)
+				break
+			}		
+		}
+	})
+
 
 	go port.Run()
-	processor.Run()
+	go processor.Run()
+
+	fmt.Println("Server started on :8080")
+    http.ListenAndServe(":8080", nil)
 }
