@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	RAW_PACKET_SIZE = 68
+	RAW_PACKET_SIZE = 72
 	RAW_MESSAGE_SIZE = RAW_PACKET_SIZE + 2
 )
 
@@ -71,7 +71,7 @@ func (r *RSerial) ReadPacket() error {
 		return fmt.Errorf("control sequence at the end incorrect, %v", tempBuf[len(tempBuf) - 2 : ])
 	}
 
-	r.MessageQueue <- [68]byte(tempBuf[:len(tempBuf) - 2])
+	r.MessageQueue <- [RAW_PACKET_SIZE]byte(tempBuf[:len(tempBuf) - 2])
 
 	return nil
 }

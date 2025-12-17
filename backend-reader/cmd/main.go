@@ -8,7 +8,7 @@ import (
 const (
 	PORT_NAME = "/dev/cu.usbserial-0001"
 	QUEUE_CAPACITY = 20
-	RAW_PACKET_SIZE = 68
+	RAW_PACKET_SIZE = 72
 )
 
 var STOP_SEQUENCE = [2]byte{'\r', '\n'}

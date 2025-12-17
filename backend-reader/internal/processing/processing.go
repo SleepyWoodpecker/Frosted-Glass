@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	RAW_PACKET_SIZE = 68
+	RAW_PACKET_SIZE = 72
 )
 
 // entry type enum
@@ -26,7 +26,8 @@ type TraceFunctionGeneralEntry struct {
     CoreId      uint8
 	_ 			[3]uint8
     Timestamp   uint32
-    Trace_id    uint32
+    TraceId    	uint32
+	FuncNumId	uint32
 }
 
 type TraceFunctionEnterEntry struct {
@@ -114,11 +115,11 @@ func (p *Processor) Run() {
 }
 
 func processEntry(entry *TraceFunctionEnterEntry) {
-	fmt.Println("got entry")
+	fmt.Printf("got entry: %+v\n", entry)
 }
 
 func processExit(entry *TraceFunctionExitEntry) {
-	fmt.Println("got exit")
+	fmt.Printf("got exit: %+v\n", entry)
 }
 
 func processPanic(entry *TraceFunctionPanicEntry) {
