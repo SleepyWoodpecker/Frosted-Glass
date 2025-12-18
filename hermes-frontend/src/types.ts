@@ -41,6 +41,7 @@ export type TraceEntryPanic = {
 
 export type TraceEntryRestart = {
     traceType: TraceTypes.RESTART;
+    coreId: number;
     timestamp: number;
     restartReason: string;
     packetId: string;

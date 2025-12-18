@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import ExecutionLog from "./components/molecules/ExecutionLog";
-import ExecutionGraph from "./components/molecules/ExecutionGraph";
 import type { TrackedTraceEntry } from "./types";
 import { Toaster } from "sonner";
 
@@ -121,7 +120,6 @@ function App() {
 
                 <main className="flex-1 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/60">
                     <div className="grid h-full grid-rows-[minmax(220px,0.75fr)_minmax(0,1fr)] divide-y divide-slate-800">
-                        <ExecutionGraph executionLog={graphTraces} />
                         <ExecutionLog executionLog={executionLogs} />
                     </div>
                 </main>

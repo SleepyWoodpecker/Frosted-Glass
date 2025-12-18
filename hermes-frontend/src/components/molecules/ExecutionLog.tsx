@@ -93,7 +93,7 @@ function ExecutionLogCard({ entry, seenSet }: ExecutionLogCardProps) {
                         Core: {coreId}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                        {timestamp}
+                        {formatNanoTo24HourLocale(timestamp)}
                     </div>
                 </div>
             </div>
@@ -130,7 +130,7 @@ function ExecutionLogCard({ entry, seenSet }: ExecutionLogCardProps) {
                         Core: {coreId}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                        {timestamp}
+                        {formatNanoTo24HourLocale(timestamp)}
                     </div>
                 </div>
             </div>
@@ -176,13 +176,13 @@ function ExecutionLogCard({ entry, seenSet }: ExecutionLogCardProps) {
                         </div>
                     </div>
                     <div className="text-sm text-muted-foreground">
-                        {timestamp}
+                        {formatNanoTo24HourLocale(timestamp)}
                     </div>
                 </div>
             </div>
         );
     } else if (entry.traceType === TraceTypes.RESTART) {
-        const { restartReason, timestamp } = entry;
+        const { restartReason, timestamp, coreId } = entry;
 
         if (!seenSet.current.has(entry.packetId)) {
             toast("Board Restarted", {
@@ -210,8 +210,11 @@ function ExecutionLogCard({ entry, seenSet }: ExecutionLogCardProps) {
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
+                    <div className="px-3 py-1 rounded-md border border-border text-sm">
+                        Core: {coreId}
+                    </div>
                     <div className="text-sm text-muted-foreground">
-                        {timestamp}
+                        {formatNanoTo24HourLocale(timestamp)}
                     </div>
                 </div>
             </div>
@@ -220,4 +223,22 @@ function ExecutionLogCard({ entry, seenSet }: ExecutionLogCardProps) {
 
     seenSet.current.add(entry.packetId);
     return dispEl;
+}
+
+function formatNanoTo24HourLocale(nanosecondTimestamp: number) {
+    console.log("nanosecondTimestamp", nanosecondTimestamp);
+    const nano = BigInt(nanosecondTimestamp);
+    const milliseconds = nano / BigInt(1000000);
+    const dateObj = new Date(Number(milliseconds));
+
+    // Use 'en-GB' locale which defaults to 24-hour time (e.g., 14:00:00)
+    // 'hour12: false' option can be specified for clarity
+    const formattedTime = dateObj.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+    });
+
+    return formattedTime;
 }

@@ -116,6 +116,7 @@ type FormattedTraceFunctionPanicEntry struct {
 }
 
 type FormattedTraceFunctionRestartEntry struct {
+	CoreId			uint32			`json:"coreId"`
 	TraceType		uint32			`json:"traceType"`
 	RestartReason	string			`json:"restartReason"`
 	PacketId		string			`json:"packetId"`
@@ -247,6 +248,7 @@ func (p *Processor) processPanic(entry *TraceFunctionPanicEntry) {
 func (p *Processor) processRestart(entry *TraceFunctionRestartEntry) {
 	p.timeKeeper.HandleBoardReset()
 	dataToSend := FormattedTraceFunctionRestartEntry{
+		CoreId: entry.CoreId,
 		TraceType: RESTART,
 		RestartReason: getResetReason(entry.RestartReason),
 		PacketId: xid.New().String(),
