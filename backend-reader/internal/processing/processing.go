@@ -119,6 +119,7 @@ type FormattedTraceFunctionRestartEntry struct {
 	TraceType		uint32			`json:"traceType"`
 	RestartReason	string			`json:"restartReason"`
 	PacketId		string			`json:"packetId"`
+	Timestamp		int64			`json:"timestamp"`
 }
 
 type Processor struct {
@@ -244,13 +245,14 @@ func (p *Processor) processPanic(entry *TraceFunctionPanicEntry) {
 }
 
 func (p *Processor) processRestart(entry *TraceFunctionRestartEntry) {
+	p.timeKeeper.HandleBoardReset()
 	dataToSend := FormattedTraceFunctionRestartEntry{
 		TraceType: RESTART,
 		RestartReason: getResetReason(entry.RestartReason),
 		PacketId: xid.New().String(),
+		Timestamp: p.timeKeeper.GetTimestampToSend(entry.Timestamp),
 	}
 	p.SocketManager.Broadcast(dataToSend)
-	p.timeKeeper.HandleBoardReset()
 }
 
 func formatFuncArgsFromBuffer(buffer *[4]interface{}, funcArgs [4]uint32, valueTypes uint8) {

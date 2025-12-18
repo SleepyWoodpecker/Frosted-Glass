@@ -6,7 +6,7 @@ import (
 
 type TimeKeeper struct {
 	ProgStartTime 	int64
-	BoardStartTime	uint32
+	BoardStartTime	int64
 }
 
 func NewTimeKeeper() *TimeKeeper {
@@ -17,13 +17,14 @@ func NewTimeKeeper() *TimeKeeper {
 }
 
 func (t *TimeKeeper) GetTimestampToSend(boardTime uint32) int64 {
+	expandedBoardTime := int64(boardTime) * 1000000
 	// if there has not been a global time, set that first
 	if t.BoardStartTime == 0 {	
 		// perform conversion from milliseconds into nanoseconds
-		t.BoardStartTime = boardTime * 1000000
+		t.BoardStartTime = expandedBoardTime
 	}
 
-	return t.ProgStartTime + (int64(boardTime) - int64(t.BoardStartTime) * 1000000)
+	return t.ProgStartTime + (expandedBoardTime - t.BoardStartTime)
 }
 
 func (t *TimeKeeper) HandleBoardReset() {
