@@ -87,13 +87,19 @@ type FormattedTraceFunctionEnterEntry struct {
 	TraceFunctionGeneralEntry
 	ArgCount	uint8
     FuncArgs    [4]interface{} 	`json:"funcArgs"`
-    FuncName    [16]byte		`json:"funcName"`
+    FuncName    string			`json:"funcName"`
 }
 
 type FormattedTraceFunctionExitEntry struct {
 	TraceFunctionGeneralEntry
     ReturnVal   interface{}			`json:"returnVal"`
-    FuncName    [16]byte			`json:"funcName"`
+    FuncName    string				`json:"funcName"`
+}
+
+type FormattedTraceFunctionPanicEntry struct {
+	TraceFunctionGeneralEntry
+	FaultingPC 			uint32 		`json:"faultingPC"`
+	ExceptionReason 	string		`json:"exceptionReason"`
 }
 
 type FormattedTraceFunctionRestartEntry struct {
@@ -180,7 +186,7 @@ func (p *Processor) processEntry(entry *TraceFunctionEnterEntry) {
 		},
 		ArgCount: entry.ArgCount,
 		FuncArgs: buffer,
-		FuncName: entry.FuncName,
+		FuncName: string(entry.FuncName[:]),
 	}
 
 	p.SocketManager.Broadcast(dataToSend)
@@ -197,14 +203,25 @@ func (p *Processor) processExit(entry *TraceFunctionExitEntry) {
 			FuncNumId: entry.FuncNumId,
 		},
 		ReturnVal: formattedReturnVal,
-		FuncName: entry.FuncName,
+		FuncName: string(entry.FuncName[:]),
 	}
 
 	p.SocketManager.Broadcast(dataToSend)
 }
 
 func (p *Processor) processPanic(entry *TraceFunctionPanicEntry) {
-	p.SocketManager.Broadcast(entry)
+	dataToSend := FormattedTraceFunctionPanicEntry{
+		TraceFunctionGeneralEntry: TraceFunctionGeneralEntry{
+			TraceType: entry.TraceType,
+			CoreId: entry.CoreId,
+			Timestamp: entry.Timestamp,
+			TraceId: entry.TraceId,
+			FuncNumId: entry.FuncNumId,
+		},
+		FaultingPC: entry.FaultingPC,
+		ExceptionReason: string(entry.ExceptionReason[:]),
+	}
+	p.SocketManager.Broadcast(dataToSend)
 }
 
 func (p *Processor) processRestart(entry *TraceFunctionRestartEntry) {
