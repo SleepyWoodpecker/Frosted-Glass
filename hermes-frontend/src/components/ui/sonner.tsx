@@ -3,7 +3,6 @@ import {
     InfoIcon,
     Loader2Icon,
     OctagonXIcon,
-    RotateCcw,
     TriangleAlertIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";

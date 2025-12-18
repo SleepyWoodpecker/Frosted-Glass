@@ -7,6 +7,8 @@ import (
 	"math"
 	"strings"
 	"unsafe"
+
+	"github.com/rs/xid"
 )
 
 const (
@@ -88,23 +90,27 @@ type FormattedTraceFunctionEnterEntry struct {
 	ArgCount	uint8			`json:"argCount"`
     FuncArgs    [4]interface{} 	`json:"funcArgs"`
     FuncName    string			`json:"funcName"`
+	PacketId	string			`json:"packetId"`
 }
 
 type FormattedTraceFunctionExitEntry struct {
 	TraceFunctionGeneralEntry
     ReturnVal   interface{}			`json:"returnVal"`
     FuncName    string				`json:"funcName"`
+	PacketId	string			`json:"packetId"`
 }
 
 type FormattedTraceFunctionPanicEntry struct {
 	TraceFunctionGeneralEntry
 	FaultingPC 			uint32 		`json:"faultingPC"`
 	ExceptionReason 	string		`json:"exceptionReason"`
+	PacketId	string			`json:"packetId"`
 }
 
 type FormattedTraceFunctionRestartEntry struct {
 	TraceType		uint32			`json:"traceType"`
 	RestartReason	string			`json:"restartReason"`
+	PacketId		string			`json:"packetId"`
 }
 
 type Processor struct {
@@ -187,6 +193,7 @@ func (p *Processor) processEntry(entry *TraceFunctionEnterEntry) {
 		ArgCount: entry.ArgCount,
 		FuncArgs: buffer,
 		FuncName: string(entry.FuncName[:]),
+		PacketId: xid.New().String(),
 	}
 
 	p.SocketManager.Broadcast(dataToSend)
@@ -204,6 +211,7 @@ func (p *Processor) processExit(entry *TraceFunctionExitEntry) {
 		},
 		ReturnVal: formattedReturnVal,
 		FuncName: string(entry.FuncName[:]),
+		PacketId: xid.New().String(),
 	}
 
 	p.SocketManager.Broadcast(dataToSend)
@@ -220,6 +228,7 @@ func (p *Processor) processPanic(entry *TraceFunctionPanicEntry) {
 		},
 		FaultingPC: entry.FaultingPC,
 		ExceptionReason: string(entry.ExceptionReason[:]),
+		PacketId: xid.New().String(),
 	}
 	p.SocketManager.Broadcast(dataToSend)
 }
@@ -228,6 +237,7 @@ func (p *Processor) processRestart(entry *TraceFunctionRestartEntry) {
 	dataToSend := FormattedTraceFunctionRestartEntry{
 		TraceType: RESTART,
 		RestartReason: getResetReason(entry.RestartReason),
+		PacketId: xid.New().String(),
 	}
 	p.SocketManager.Broadcast(dataToSend)
 }
