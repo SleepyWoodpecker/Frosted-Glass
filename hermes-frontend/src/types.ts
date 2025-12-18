@@ -14,6 +14,7 @@ export type TraceEntryEnter = {
     argCount: number;
     funcArgs: number[];
     funcName: string;
+    packetId: string;
 };
 
 export type TraceEntryExit = {
@@ -24,6 +25,7 @@ export type TraceEntryExit = {
     funcCallId: number;
     returnVal: number;
     funcName: string;
+    packetId: string;
 };
 
 export type TraceEntryPanic = {
@@ -34,12 +36,14 @@ export type TraceEntryPanic = {
     funcCallId: number;
     faultingPC: number;
     exceptionReason: string;
+    packetId: string;
 };
 
 export type TraceEntryRestart = {
     traceType: TraceTypes.RESTART;
     timestamp: number;
     restartReason: string;
+    packetId: string;
 };
 
 export type TraceEntry =
@@ -47,3 +51,5 @@ export type TraceEntry =
     | TraceEntryExit
     | TraceEntryPanic
     | TraceEntryRestart;
+
+export type TrackedTraceEntry = TraceEntry;

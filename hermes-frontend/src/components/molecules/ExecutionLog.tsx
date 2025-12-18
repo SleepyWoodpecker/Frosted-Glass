@@ -1,13 +1,16 @@
 import { AlertTriangle, ArrowLeft, ArrowRight, RotateCcw } from "lucide-react";
-import { TraceTypes, type TraceEntry } from "../../types";
+import { TraceTypes, type TrackedTraceEntry } from "../../types";
 import { Card, CardContent, CardHeader } from "../ui/card";
 import { Badge } from "../ui/badge";
+import { toast } from "sonner";
+import { useRef, type RefObject } from "react";
 
 interface ExecutionLogProps {
-    executionLog: TraceEntry[];
+    executionLog: TrackedTraceEntry[];
 }
 
 export default function ExecutionLog({ executionLog }: ExecutionLogProps) {
+    const seenLogsRef = useRef<Set<string>>(new Set());
     return (
         <Card>
             <CardHeader>Trace log</CardHeader>
@@ -16,16 +19,15 @@ export default function ExecutionLog({ executionLog }: ExecutionLogProps) {
                     <div>Waiting for logs...</div> // TODO: could make this a loading skeleton
                 ) : (
                     <div className="flex flex-col gap-2">
-                        {executionLog.map((sample) => (
-                            <ExecutionLogCard
-                                entry={sample}
-                                key={`${sample.traceType},${sample.timestamp}${
-                                    sample.traceType === TraceTypes.RESTART
-                                        ? ``
-                                        : `${sample.traceId},${sample.funcCallId}`
-                                }`}
-                            />
-                        ))}
+                        {executionLog.map((sample) => {
+                            return (
+                                <ExecutionLogCard
+                                    entry={sample}
+                                    key={`${sample.packetId}`}
+                                    seenSet={seenLogsRef}
+                                />
+                            );
+                        })}
                     </div>
                 )}
             </CardContent>
@@ -34,10 +36,13 @@ export default function ExecutionLog({ executionLog }: ExecutionLogProps) {
 }
 
 interface ExecutionLogCardProps {
-    entry: TraceEntry;
+    entry: TrackedTraceEntry;
+    seenSet: RefObject<Set<string>>;
 }
 
-function ExecutionLogCard({ entry }: ExecutionLogCardProps) {
+function ExecutionLogCard({ entry, seenSet }: ExecutionLogCardProps) {
+    let dispEl = <div></div>;
+
     if (entry.traceType === TraceTypes.ENTER) {
         const {
             coreId,
@@ -49,7 +54,7 @@ function ExecutionLogCard({ entry }: ExecutionLogCardProps) {
             funcCallId,
         } = entry;
 
-        return (
+        dispEl = (
             <div className="flex items-center justify-between w-full gap-8 p-4 border rounded-lg border-border bg-card h-20">
                 <div className="flex items-center gap-4">
                     <span className="text-yellow-400">
@@ -96,7 +101,7 @@ function ExecutionLogCard({ entry }: ExecutionLogCardProps) {
     } else if (entry.traceType === TraceTypes.EXIT) {
         const { coreId, timestamp, traceId, funcCallId, returnVal, funcName } =
             entry;
-        return (
+        dispEl = (
             <div className="flex items-center justify-between w-full gap-8 p-4 border rounded-lg border-border bg-card h-20">
                 <div className="flex items-center gap-4">
                     <span className="text-green-400">
@@ -133,7 +138,19 @@ function ExecutionLogCard({ entry }: ExecutionLogCardProps) {
     } else if (entry.traceType === TraceTypes.PANIC) {
         const { timestamp, faultingPC, exceptionReason, traceId } = entry;
 
-        return (
+        if (!seenSet.current.has(entry.packetId)) {
+            toast("Board Panic", {
+                icon: <AlertTriangle className="text-red-500" />,
+                style: {
+                    background: "rgba(69, 10, 10, 0.2)", // bg-red-950/20
+                    color: "#e5e7eb",
+                    border: "1px solid rgba(239, 68, 68, 0.5)", // border-red-500/50
+                    borderRadius: "12px",
+                },
+            });
+        }
+
+        dispEl = (
             <div className="flex items-center justify-between w-full gap-8 p-4 border rounded-lg border-red-500/50 bg-red-950/20 hover:bg-red-950/30 h-20">
                 <div className="flex items-center gap-4">
                     <span className="text-red-400">
@@ -166,7 +183,20 @@ function ExecutionLogCard({ entry }: ExecutionLogCardProps) {
         );
     } else if (entry.traceType === TraceTypes.RESTART) {
         const { restartReason, timestamp } = entry;
-        return (
+
+        if (!seenSet.current.has(entry.packetId)) {
+            toast("Board Restarted", {
+                icon: <RotateCcw className="text-orange-500" />,
+                style: {
+                    background: "rgba(69, 26, 3, 0.2)", // bg-orange-950/20
+                    color: "#e5e7eb",
+                    border: "1px solid rgba(249, 115, 22, 0.5)", // border-orange-500/50
+                    borderRadius: "12px",
+                },
+            });
+        }
+
+        dispEl = (
             <div className="flex items-center justify-between w-full gap-8 p-4 border rounded-lg border-orange-500/50 bg-orange-950/20 hover:bg-orange-950/30 h-20">
                 <div className="flex items-center gap-4">
                     <span className="text-orange-400">
@@ -187,4 +217,7 @@ function ExecutionLogCard({ entry }: ExecutionLogCardProps) {
             </div>
         );
     }
+
+    seenSet.current.add(entry.packetId);
+    return dispEl;
 }
