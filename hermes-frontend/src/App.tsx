@@ -1,23 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import ExecutionLog from "./components/molecules/ExecutionLog";
+import ExecutionGraph from "./components/molecules/ExecutionGraph";
 import type { TrackedTraceEntry } from "./types";
 import { Toaster } from "sonner";
 
 const webSocketUrl = "ws://localhost:8080/data";
-const MAX_EXECUTION_LOGS = 500;
+const MAX_EXECUTION_LOGS = 250;
+const GRAPH_BUFFER_MS = 4_000; // keep ~4s of traces for the graph
 
 // NOTE: this should have a global state that it passes to all its children
 function App() {
     const webSocketRef = useRef<WebSocket | null>(null);
     const [connected, setConnected] = useState(false);
     const [executionLogs, setExecutionLogs] = useState<TrackedTraceEntry[]>([]);
+    const [graphTraces, setGraphTraces] = useState<TrackedTraceEntry[]>([]);
 
     useEffect(() => {
         document.documentElement.classList.add("dark");
         return () => {
             document.documentElement.classList.remove("dark");
         };
-    });
+    }, []);
 
     useEffect(() => {
         if (connected) {
@@ -28,9 +31,16 @@ function App() {
             };
 
             webSocketRef.current.onmessage = (e) => {
+                const now = Date.now();
+                const parsed = JSON.parse(e.data);
+                const withTimestamp: TrackedTraceEntry = {
+                    ...parsed,
+                    receivedAt: now,
+                };
+
                 setExecutionLogs((prevExecutionLogs) => {
-                    const nextLogs = [
-                        { seen: false, ...JSON.parse(e.data) },
+                    const nextLogs: TrackedTraceEntry[] = [
+                        withTimestamp,
                         ...prevExecutionLogs,
                     ];
 
@@ -39,6 +49,15 @@ function App() {
                     }
 
                     return nextLogs;
+                });
+
+                // Maintain a time-bounded buffer just for the execution graph.
+                setGraphTraces((prev) => {
+                    const cutoff = now - GRAPH_BUFFER_MS;
+                    const pruned = prev.filter(
+                        (entry) => entry.receivedAt >= cutoff
+                    );
+                    return [withTimestamp, ...pruned];
                 });
             };
         } else {
@@ -101,7 +120,10 @@ function App() {
                 </header>
 
                 <main className="flex-1 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/60">
-                    <ExecutionLog executionLog={executionLogs} />
+                    <div className="grid h-full grid-rows-[minmax(220px,0.75fr)_minmax(0,1fr)] divide-y divide-slate-800">
+                        <ExecutionGraph executionLog={graphTraces} />
+                        <ExecutionLog executionLog={executionLogs} />
+                    </div>
                 </main>
             </div>
 

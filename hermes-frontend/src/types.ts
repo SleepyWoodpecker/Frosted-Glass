@@ -52,4 +52,11 @@ export type TraceEntry =
     | TraceEntryPanic
     | TraceEntryRestart;
 
-export type TrackedTraceEntry = TraceEntry;
+export type TrackedTraceEntry = TraceEntry & {
+    /**
+     * Wall-clock time (in ms since epoch) when this trace
+     * was received by the frontend. Used for time-windowed
+     * visualizations like the execution graph.
+     */
+    receivedAt: number;
+};
