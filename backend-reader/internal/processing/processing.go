@@ -5,7 +5,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
+	"time"
 	"unsafe"
 
 	"github.com/rs/xid"
@@ -15,6 +17,7 @@ const (
 	RAW_PACKET_SIZE = 72
 	IS_FLOAT = 0b01
 	IS_SIGNED = 0b10
+	TIME_BETWEEN_STATS_PACKETS = 5
 )
 
 // entry type enum
@@ -23,6 +26,8 @@ const (
     EXIT
     PANIC
 	RESTART
+	FLAME_GRAPH_ENTRY // only send completed entries to the frontend
+	STAT_UPDATES
 )
 
 // esp32 restart reasons
@@ -58,7 +63,7 @@ type TraceFunctionGeneralEntry struct {
 type FormattedTraceFunctionGeneralEntry struct {
 	TraceType   uint32 	`json:"traceType"`
     CoreId      uint32	`json:"coreId"`
-    Timestamp   int64	`json:"timestamp"`
+    Timestamp   string	`json:"timestamp"`
     TraceId    	uint32	`json:"traceId"`
 	FuncNumId	uint32	`json:"funcCallId"`
 }
@@ -120,7 +125,23 @@ type FormattedTraceFunctionRestartEntry struct {
 	TraceType		uint32			`json:"traceType"`
 	RestartReason	string			`json:"restartReason"`
 	PacketId		string			`json:"packetId"`
-	Timestamp		int64			`json:"timestamp"`
+	Timestamp		string			`json:"timestamp"`
+}
+
+type FormattedCompletedFunctionCall struct {
+	FormattedTraceFunctionGeneralEntry
+	ArgCount	uint8				`json:"argCount"`
+    FuncArgs    [4]interface{} 		`json:"funcArgs"` // TODO: there is a way to remove this eventually
+    FuncName    string				`json:"funcName"`
+	ReturnVal   interface{}		 	`json:"returnVal"`
+	PacketId	string				`json:"packetId"`
+	StartTime	int64				`json:"startTime"`
+	EndTime		int64				`json:"endTime"`
+}
+
+type StatPacket struct {
+	TraceType   uint32 							`json:"traceType"`
+	StatMap		[]FormattedFunctionStats		`json:"statMap"`
 }
 
 type Processor struct {
@@ -128,6 +149,8 @@ type Processor struct {
 	PortName 	string
 	SocketManager *SocketManager
 	timeKeeper	*TimeKeeper
+	activeFuncionCalls	map[uint32]FormattedCompletedFunctionCall
+	statTracker *StatTracker
 }
 
 func NewProcessor(portname string, messageQueue <-chan [RAW_PACKET_SIZE]byte, sm *SocketManager) *Processor {
@@ -136,6 +159,8 @@ func NewProcessor(portname string, messageQueue <-chan [RAW_PACKET_SIZE]byte, sm
 		PortName: portname,
 		SocketManager: sm,
 		timeKeeper: NewTimeKeeper(),
+		activeFuncionCalls: make(map[uint32]FormattedCompletedFunctionCall),
+		statTracker: NewStatTracker(),
 	}
 }
 
@@ -185,7 +210,25 @@ func (p *Processor) Process() {
 	}
 }
 
+func (p *Processor) BroadcastStats() {
+	ticker := time.NewTicker(TIME_BETWEEN_STATS_PACKETS * time.Second)
+	
+	for range ticker.C {
+		statArr := p.statTracker.GetStats()
+
+		p.SocketManager.Broadcast(
+			StatPacket{
+				TraceType: STAT_UPDATES,
+				StatMap: *statArr,
+			},
+		)
+	}
+}
+
 func (p *Processor) Run() {
+	// spawn another thread to send stat updates
+	go p.BroadcastStats()
+
 	for {
 		p.Process()
 	}
@@ -194,11 +237,14 @@ func (p *Processor) Run() {
 func (p *Processor) processEntry(entry *TraceFunctionEnterEntry) {
 	buffer := [4]interface{}{}	
 	formatFuncArgsFromBuffer(&buffer, entry.FuncArgs, entry.ValueTypes)
+
+	funcStartTime := p.timeKeeper.GetTimestampToSend(entry.Timestamp)
+
 	dataToSend := FormattedTraceFunctionEnterEntry{
 		FormattedTraceFunctionGeneralEntry: FormattedTraceFunctionGeneralEntry{
 			TraceType: entry.TraceType,
 			CoreId: entry.CoreId,
-			Timestamp: p.timeKeeper.GetTimestampToSend(entry.Timestamp),
+			Timestamp: strconv.FormatInt(funcStartTime, 10),
 			TraceId: entry.TraceId,
 			FuncNumId: entry.FuncNumId,
 		},
@@ -209,15 +255,31 @@ func (p *Processor) processEntry(entry *TraceFunctionEnterEntry) {
 	}
 
 	p.SocketManager.Broadcast(dataToSend)
+
+	p.activeFuncionCalls[entry.FuncNumId] = FormattedCompletedFunctionCall{
+		FormattedTraceFunctionGeneralEntry: FormattedTraceFunctionGeneralEntry{
+			TraceType: FLAME_GRAPH_ENTRY,
+			CoreId: entry.CoreId,
+			Timestamp: strconv.FormatInt(time.Now().UnixNano(), 10), // NOTE: not sure if this is the best idea for now
+			TraceId: entry.TraceId,
+			FuncNumId: entry.FuncNumId,
+		},
+		ArgCount: entry.ArgCount,
+		FuncArgs: buffer,
+		FuncName: string(entry.FuncName[:]),
+		PacketId: xid.New().String(),
+		StartTime: funcStartTime,
+	}
 }
 
 func (p *Processor) processExit(entry *TraceFunctionExitEntry) {
 	formattedReturnVal := formatFuncArg(entry.ReturnVal, entry.ValueTypes, 0)
+	funcEndTime := p.timeKeeper.GetTimestampToSend(entry.Timestamp)
 	dataToSend := FormattedTraceFunctionExitEntry{
 		FormattedTraceFunctionGeneralEntry: FormattedTraceFunctionGeneralEntry{
 			TraceType: entry.TraceType,
 			CoreId: entry.CoreId,
-			Timestamp: p.timeKeeper.GetTimestampToSend(entry.Timestamp),
+			Timestamp: strconv.FormatInt(funcEndTime, 10),
 			TraceId: entry.TraceId,
 			FuncNumId: entry.FuncNumId,
 		},
@@ -227,6 +289,16 @@ func (p *Processor) processExit(entry *TraceFunctionExitEntry) {
 	}
 
 	p.SocketManager.Broadcast(dataToSend)
+
+	if record, ok := p.activeFuncionCalls[entry.FuncNumId]; ok {
+		record.ReturnVal = formattedReturnVal
+		record.EndTime = funcEndTime
+		p.SocketManager.Broadcast(record)
+
+		p.statTracker.AddStats(&record)
+
+		delete(p.activeFuncionCalls, entry.FuncNumId)
+	}
 }
 
 func (p *Processor) processPanic(entry *TraceFunctionPanicEntry) {
@@ -234,7 +306,7 @@ func (p *Processor) processPanic(entry *TraceFunctionPanicEntry) {
 		FormattedTraceFunctionGeneralEntry: FormattedTraceFunctionGeneralEntry{
 			TraceType: entry.TraceType,
 			CoreId: entry.CoreId,
-			Timestamp: p.timeKeeper.GetTimestampToSend(entry.Timestamp),
+			Timestamp: strconv.FormatInt(p.timeKeeper.GetTimestampToSend(entry.Timestamp), 10),
 			TraceId: entry.TraceId,
 			FuncNumId: entry.FuncNumId,
 		},
@@ -252,7 +324,7 @@ func (p *Processor) processRestart(entry *TraceFunctionRestartEntry) {
 		TraceType: RESTART,
 		RestartReason: getResetReason(entry.RestartReason),
 		PacketId: xid.New().String(),
-		Timestamp: p.timeKeeper.GetTimestampToSend(entry.Timestamp),
+		Timestamp: strconv.FormatInt(p.timeKeeper.GetTimestampToSend(entry.Timestamp), 10),
 	}
 	p.SocketManager.Broadcast(dataToSend)
 }

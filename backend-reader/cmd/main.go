@@ -18,7 +18,7 @@ var STOP_SEQUENCE = [2]byte{'\r', '\n'}
 
 func main() {
 	messageQueue := make(chan [RAW_PACKET_SIZE]byte, QUEUE_CAPACITY)
-	port := rSerial.NewRSerial(PORT_NAME, 115200, STOP_SEQUENCE[:], messageQueue)
+	port := rSerial.NewRSerial(PORT_NAME, 460800, STOP_SEQUENCE[:], messageQueue)
 	defer port.Close()
 
 	socketManager := processing.NewSocketManager()
