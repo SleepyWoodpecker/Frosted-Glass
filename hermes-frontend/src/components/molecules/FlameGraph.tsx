@@ -1,6 +1,12 @@
-import { useEffect, useRef } from "react";
+import React, {
+    useEffect,
+    useRef,
+    useState,
+    type MouseEvent as ReactMouseEvent,
+} from "react";
 import type { TraceEntryCallStack } from "../../types";
 import { getColor } from "../../util";
+import Tooltip from "../atoms/Tooltip";
 
 interface ExecutionFlameGraphProps {
     traces: TraceEntryCallStack[];
@@ -31,6 +37,11 @@ export default function ExecutionFlameGraph({
     // animation frameIds -- used to pause progress if disconnected
     const timerAnimationRef = useRef<number | null>(null);
     const flameGraphAnimationRef = useRef<number | null>(null);
+
+    // hover map
+    const drawnShapeMap = useRef<Map<string, TraceEntryCallStack>>(new Map());
+    const [inspectedFunction, setInspectedFunction] =
+        useState<TraceEntryCallStack | null>(null);
 
     // 1. Sync Data
     useEffect(() => {
@@ -194,6 +205,7 @@ export default function ExecutionFlameGraph({
             const xDiv = width / renderWindow;
 
             // 4. Render Bars
+            const renderMap = new Map();
             visibleTraces.forEach((rect) => {
                 const rectStart = Number(BigInt(rect.startTime) - renderStart);
                 const rectEnd = Number(BigInt(rect.endTime) - renderStart);
@@ -206,6 +218,8 @@ export default function ExecutionFlameGraph({
 
                 ctx.fillStyle = getColor(rect.funcName, rect.depth);
                 ctx.fillRect(x, y, w, ROW_HEIGHT - 2);
+
+                renderMap.set(`${x},${y},${x + w},${y + ROW_HEIGHT - 2}`, rect);
 
                 if (w > 30) {
                     const cleanName = rect.funcName.replace(/\u0000/g, "");
@@ -220,6 +234,8 @@ export default function ExecutionFlameGraph({
                     ctx.restore();
                 }
             });
+
+            drawnShapeMap.current = renderMap;
 
             // 5. Render Axis
             ctx.save();
@@ -267,6 +283,27 @@ export default function ExecutionFlameGraph({
         };
     }, [connected]);
 
+    const handleMouseMove = (e: ReactMouseEvent) => {
+        const mouseXLocation = e.nativeEvent.offsetX;
+        const mouseYLocation = e.nativeEvent.offsetY;
+
+        for (const [key, value] of drawnShapeMap.current) {
+            const [x, y, xEnd, yEnd] = key.split(",");
+
+            if (
+                mouseXLocation >= Number(x) &&
+                mouseXLocation <= Number(xEnd) &&
+                mouseYLocation >= Number(y) &&
+                mouseYLocation <= Number(yEnd)
+            ) {
+                setInspectedFunction(value);
+                break;
+            } else {
+                setInspectedFunction(null);
+            }
+        }
+    };
+
     return (
         <div
             ref={containerRef}
@@ -287,6 +324,7 @@ export default function ExecutionFlameGraph({
                     top: 0,
                     left: 0,
                 }}
+                onMouseMove={handleMouseMove}
             />
 
             {/* 2. Top Layer: The UI (Transparent background) */}
@@ -300,6 +338,10 @@ export default function ExecutionFlameGraph({
                     pointerEvents: "none",
                 }}
             />
+
+            {inspectedFunction && (
+                <Tooltip inspectedFunction={inspectedFunction} />
+            )}
         </div>
     );
 }
