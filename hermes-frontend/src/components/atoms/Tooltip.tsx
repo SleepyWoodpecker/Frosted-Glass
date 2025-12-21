@@ -7,7 +7,7 @@ interface TooltipProps {
 export default function Tooltip({ inspectedFunction }: TooltipProps) {
     return (
         <div
-            className="absolute z-50 p-3 rounded-md border border-gray-700 bg-gray-900/80 backdrop-blur-md shadow-xl text-xs font-mono text-gray-200 pointer-events-none"
+            className="absolute z-50 p-3 rounded-md border border-gray-700 bg-gray-900/60 backdrop-blur-lg shadow-xl text-xs font-mono text-gray-200 pointer-events-none"
             style={{
                 // Position this based on your mouse coordinates
                 // You might need to add a small offset (e.g., +15px) so it doesn't block the cursor

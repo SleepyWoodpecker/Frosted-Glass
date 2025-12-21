@@ -1,4 +1,4 @@
-import React, {
+import {
     useEffect,
     useRef,
     useState,
@@ -34,7 +34,7 @@ export default function ExecutionFlameGraph({
     const dimensionsRef = useRef({ width: 0, height: 0 });
     const recordStartTimeRef = useRef<number>(Date.now());
 
-    // animation frameIds -- used to pause progress if disconnected
+    // animation frameIds
     const timerAnimationRef = useRef<number | null>(null);
     const flameGraphAnimationRef = useRef<number | null>(null);
 
@@ -55,26 +55,36 @@ export default function ExecutionFlameGraph({
         }
     }, [traces]);
 
-    // 2. Resize Observer (Resizes BOTH canvases)
+    // 2. Resize Observer (Resizes BOTH canvases for High DPI)
     useEffect(() => {
         if (!containerRef.current) return;
+
         const resizeObserver = new ResizeObserver((entries) => {
             for (const entry of entries) {
+                // Logical dimensions (CSS pixels)
                 const { width, height } = entry.contentRect;
                 dimensionsRef.current = { width, height };
 
-                // Resize Graph Canvas
-                if (graphCanvasRef.current) {
-                    graphCanvasRef.current.width = width;
-                    graphCanvasRef.current.height = height;
-                }
-                // Resize UI Canvas
-                if (uiCanvasRef.current) {
-                    uiCanvasRef.current.width = width;
-                    uiCanvasRef.current.height = height;
-                }
+                const dpr = window.devicePixelRatio || 1;
+
+                // Helper to resize canvas for High DPI
+                const resizeCanvas = (canvas: HTMLCanvasElement | null) => {
+                    if (canvas) {
+                        // Set physical pixel dimensions (for sharpness)
+                        canvas.width = width * dpr;
+                        canvas.height = height * dpr;
+
+                        // Set CSS dimensions (for layout size)
+                        canvas.style.width = `${width}px`;
+                        canvas.style.height = `${height}px`;
+                    }
+                };
+
+                resizeCanvas(graphCanvasRef.current);
+                resizeCanvas(uiCanvasRef.current);
             }
         });
+
         resizeObserver.observe(containerRef.current);
         return () => resizeObserver.disconnect();
     }, []);
@@ -98,9 +108,16 @@ export default function ExecutionFlameGraph({
 
         const renderUI = () => {
             const { width, height } = dimensionsRef.current;
+            const dpr = window.devicePixelRatio || 1;
 
-            // Clear the UI canvas completely
-            ctx.clearRect(0, 0, width, height);
+            // 1. Reset Transform & Clear
+            // We reset to identity matrix to clear the full physical canvas safely
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 2. Apply High DPI Scale
+            // All subsequent drawing commands will now use Logical Pixels
+            ctx.scale(dpr, dpr);
 
             // Draw Timer
             ctx.save();
@@ -111,7 +128,6 @@ export default function ExecutionFlameGraph({
 
             const elapsed = Date.now() - recordStartTimeRef.current;
 
-            // Draw in top-right corner
             if (width > 0) {
                 ctx.fillText(`Time since start: ${elapsed} ms`, width - 10, 5);
             }
@@ -136,7 +152,8 @@ export default function ExecutionFlameGraph({
         if (!connected) {
             if (flameGraphAnimationRef.current) {
                 cancelAnimationFrame(flameGraphAnimationRef.current);
-                timerAnimationRef.current = null;
+                timerAnimationRef.current = null; // Typo in original: should likely clear flameGraphAnimationRef
+                flameGraphAnimationRef.current = null;
             }
             return;
         }
@@ -149,8 +166,8 @@ export default function ExecutionFlameGraph({
         const renderGraph = () => {
             const traces = latestTracesRef.current;
             const { width, height } = dimensionsRef.current;
+            const dpr = window.devicePixelRatio || 1;
 
-            // Guard: If hidden or empty, just wait
             if (width === 0 || height === 0 || traces.length === 0) {
                 flameGraphAnimationRef.current =
                     requestAnimationFrame(renderGraph);
@@ -159,11 +176,16 @@ export default function ExecutionFlameGraph({
 
             const graphHeight = height - AXIS_HEIGHT;
 
-            // 1. Clear Background
+            // 1. High DPI Setup & Clear
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear physical area
+            ctx.scale(dpr, dpr); // Scale coordinate system
+
+            // 2. Draw Background (using logical dimensions)
             ctx.fillStyle = "#1e1e1e";
             ctx.fillRect(0, 0, width, height);
 
-            // 2. Smart Pruning Logic
+            // 3. Smart Pruning Logic
             let keepStartIndex = 0;
             let activeWorkSum = 0n;
             for (let i = traces.length - 1; i > 0; i--) {
@@ -183,7 +205,7 @@ export default function ExecutionFlameGraph({
 
             const visibleTraces = traces.slice(keepStartIndex);
 
-            // 3. Viewport Math
+            // 4. Viewport Math
             let minStart = BigInt(visibleTraces[0].startTime);
             let maxEnd = BigInt(visibleTraces[0].endTime);
             visibleTraces.forEach((t) => {
@@ -201,10 +223,10 @@ export default function ExecutionFlameGraph({
                         : (maxEnd - minStart) / 20n)
             );
             const renderStart =
-                minStart - BigInt(Math.floor(renderWindow * 0.05)); // 5% padding left
+                minStart - BigInt(Math.floor(renderWindow * 0.05));
             const xDiv = width / renderWindow;
 
-            // 4. Render Bars
+            // 5. Render Bars
             const renderMap = new Map();
             visibleTraces.forEach((rect) => {
                 const rectStart = Number(BigInt(rect.startTime) - renderStart);
@@ -219,6 +241,7 @@ export default function ExecutionFlameGraph({
                 ctx.fillStyle = getColor(rect.funcName, rect.depth);
                 ctx.fillRect(x, y, w, ROW_HEIGHT - 2);
 
+                // Store coords in Logical Pixels, so mouse events match automatically
                 renderMap.set(`${x},${y},${x + w},${y + ROW_HEIGHT - 2}`, rect);
 
                 if (w > 30) {
@@ -237,9 +260,10 @@ export default function ExecutionFlameGraph({
 
             drawnShapeMap.current = renderMap;
 
-            // 5. Render Axis
+            // 6. Render Axis
             ctx.save();
             ctx.strokeStyle = "#444";
+            ctx.lineWidth = 1; // 1 logical pixel = 2 physical pixels on Retina (crisp)
             ctx.beginPath();
             ctx.moveTo(0, graphHeight);
             ctx.lineTo(width, graphHeight);
@@ -284,6 +308,7 @@ export default function ExecutionFlameGraph({
     }, [connected]);
 
     const handleMouseMove = (e: ReactMouseEvent) => {
+        // offsetX is in CSS pixels, which matches our scaled context coords
         const mouseXLocation = e.nativeEvent.offsetX;
         const mouseYLocation = e.nativeEvent.offsetY;
 
@@ -308,14 +333,13 @@ export default function ExecutionFlameGraph({
         <div
             ref={containerRef}
             style={{
-                position: "relative", // Needed for absolute positioning children
+                position: "relative",
                 width: "100%",
                 height: "100%",
                 minHeight: "400px",
                 backgroundColor: "#1e1e1e",
             }}
         >
-            {/* 1. Bottom Layer: The Graph */}
             <canvas
                 ref={graphCanvasRef}
                 style={{
@@ -326,8 +350,6 @@ export default function ExecutionFlameGraph({
                 }}
                 onMouseMove={handleMouseMove}
             />
-
-            {/* 2. Top Layer: The UI (Transparent background) */}
             <canvas
                 ref={uiCanvasRef}
                 style={{
@@ -338,7 +360,6 @@ export default function ExecutionFlameGraph({
                     pointerEvents: "none",
                 }}
             />
-
             {inspectedFunction && (
                 <Tooltip inspectedFunction={inspectedFunction} />
             )}
