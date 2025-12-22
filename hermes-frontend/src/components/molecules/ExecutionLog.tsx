@@ -1,12 +1,17 @@
-import { AlertTriangle, ArrowLeft, ArrowRight, RotateCcw } from "lucide-react";
-import { TraceTypes, type TrackedTraceEntry } from "../../types";
+import { ArrowLeft, ArrowRight, RotateCcw } from "lucide-react";
+import {
+    TraceTypes,
+    type TraceEntryEnter,
+    type TraceEntryExit,
+    type TraceEntryRestart,
+} from "../../types";
 import { Card, CardContent, CardHeader } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { toast } from "sonner";
 import { useRef, type RefObject } from "react";
 
 interface ExecutionLogProps {
-    executionLog: TrackedTraceEntry[];
+    executionLog: Array<TraceEntryEnter | TraceEntryExit | TraceEntryRestart>;
 }
 
 export default function ExecutionLog({ executionLog }: ExecutionLogProps) {
@@ -36,7 +41,7 @@ export default function ExecutionLog({ executionLog }: ExecutionLogProps) {
 }
 
 interface ExecutionLogCardProps {
-    entry: TrackedTraceEntry;
+    entry: TraceEntryEnter | TraceEntryExit | TraceEntryRestart;
     seenSet: RefObject<Set<string>>;
 }
 
@@ -128,53 +133,6 @@ function ExecutionLogCard({ entry, seenSet }: ExecutionLogCardProps) {
                     </div>
                     <div className="px-3 py-1 rounded-md border border-border text-sm">
                         Core: {coreId}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                        {formatNanoTo24HourLocale(timestamp)}
-                    </div>
-                </div>
-            </div>
-        );
-    } else if (entry.traceType === TraceTypes.PANIC) {
-        const { timestamp, faultingPC, exceptionReason, traceId } = entry;
-        console.log(timestamp);
-
-        if (!seenSet.current.has(entry.packetId)) {
-            toast("Board Panic", {
-                icon: <AlertTriangle className="text-red-500" />,
-                style: {
-                    background: "rgba(69, 10, 10, 0.2)", // bg-red-950/20
-                    color: "#e5e7eb",
-                    border: "1px solid rgba(239, 68, 68, 0.5)", // border-red-500/50
-                    borderRadius: "12px",
-                },
-            });
-        }
-
-        dispEl = (
-            <div className="flex items-center justify-between w-full gap-8 p-4 border rounded-lg border-red-500/50 bg-red-950/20 hover:bg-red-950/30 h-20">
-                <div className="flex items-center gap-4">
-                    <span className="text-red-400">
-                        <AlertTriangle />
-                    </span>
-                    <Badge className="px-3 py-1 w-20">PANIC</Badge>
-                    <div className="flex flex-col justify-center items-center">
-                        <code className="bg-muted text-muted-foreground px-2 py-1 rounded-md text-sm text-center">
-                            {exceptionReason}
-                        </code>
-                        <p className="text-xs text-muted-foreground/80">
-                            Trace #{traceId}
-                        </p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-4">
-                    <div className="flex flex-row items-center gap-1">
-                        <p className="text-xs text-muted-foreground/80">
-                            Faulting PC:
-                        </p>
-                        <div className="bg-muted text-muted-foreground px-2 py-1 rounded-md text-sm">
-                            <code>0x{faultingPC.toString(16)}</code>
-                        </div>
                     </div>
                     <div className="text-sm text-muted-foreground">
                         {formatNanoTo24HourLocale(timestamp)}
