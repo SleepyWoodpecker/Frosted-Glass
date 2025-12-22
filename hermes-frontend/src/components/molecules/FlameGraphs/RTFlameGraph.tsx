@@ -4,9 +4,9 @@ import {
     useState,
     type MouseEvent as ReactMouseEvent,
 } from "react";
-import type { TraceEntryCallStack } from "../../types";
-import { getColor } from "../../util";
-import Tooltip from "../atoms/Tooltip";
+import type { TraceEntryCallStack } from "../../../types";
+import { getColor } from "../../../util";
+import Tooltip from "../../atoms/Tooltip";
 
 interface ExecutionFlameGraphProps {
     traces: TraceEntryCallStack[];
@@ -18,7 +18,7 @@ const Y_OFFSET = 20;
 const GAP_THRESHOLD_MULTIPLIER = 5;
 const AXIS_HEIGHT = 30;
 
-export default function ExecutionFlameGraph({
+export default function RTExecutionFlameGraph({
     traces,
     connected,
 }: ExecutionFlameGraphProps) {

@@ -8,7 +8,8 @@ import {
 } from "./types";
 import { Toaster } from "sonner";
 import StatTable from "./components/molecules/StatTable";
-import ExecutionFlameGraph from "./components/molecules/FlameGraph";
+import RTExecutionFlameGraph from "./components/molecules/FlameGraphs/RTFlameGraph";
+import PlaybackFlameGraph from "./components/molecules/FlameGraphs/PlaybackFlameGraph";
 
 const webSocketUrl = "ws://localhost:8080/data";
 const MAX_EXECUTION_LOGS = 250;
@@ -152,10 +153,14 @@ function App() {
 
                 <main className="flex-1 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/60">
                     <div className="flex flex-col gap-4">
-                        <ExecutionFlameGraph
-                            traces={flameGraphLogs}
-                            connected={connected}
-                        />
+                        {connected ? (
+                            <RTExecutionFlameGraph
+                                traces={flameGraphLogs}
+                                connected={connected}
+                            />
+                        ) : (
+                            <PlaybackFlameGraph traces={flameGraphLogs} />
+                        )}
                         <div className="grid grid-cols-2 gap-4">
                             <StatTable statMap={stats} />
                             <ExecutionLog executionLog={executionLogs} />
