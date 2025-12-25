@@ -82,7 +82,7 @@ func (r *RSerial) Run() {
 
 	for {
 		if err := r.ReadPacket(); err != nil {
-			fmt.Printf("%v\n", err)
+			log.Printf("%v\n", err)
 			r.sync()
 		}
 	}
