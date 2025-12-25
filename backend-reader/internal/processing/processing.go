@@ -19,6 +19,8 @@ const (
 	IS_FLOAT = 0b01
 	IS_SIGNED = 0b10
 	TIME_BETWEEN_STATS_PACKETS = 5
+	CORE_0 = 0
+	CORE_1 = 1
 )
 
 // entry type enum
@@ -158,7 +160,8 @@ type Processor struct {
 	activeFuncionCalls		map[uint32]*FormattedCompletedFunctionCall
 	statTracker 			*StatTracker
 
-	funcCallStack			[]uint32
+	core0FuncCallStack		[]uint32
+	core1FuncCallStack 		[]uint32
 }
 
 func NewProcessor(portname string, messageQueue <-chan [RAW_PACKET_SIZE]byte, sm *SocketManager) *Processor {
@@ -169,7 +172,8 @@ func NewProcessor(portname string, messageQueue <-chan [RAW_PACKET_SIZE]byte, sm
 		timeKeeper: NewTimeKeeper(),
 		activeFuncionCalls: make(map[uint32]*FormattedCompletedFunctionCall),
 		statTracker: NewStatTracker(),
-		funcCallStack: make([]uint32, 0),
+		core0FuncCallStack: make([]uint32, 0),
+		core1FuncCallStack: make([]uint32, 0),
 	}
 }
 
@@ -275,6 +279,15 @@ func (p *Processor) processEntry(entry *TraceFunctionEnterEntry) {
 	1. Functions that nest multiple calls (call multiple sub functions within the same function)
 	2. Functions that are recursively deep (probably some fibonacci function)
 	*/
+	var callStackToUse *[]uint32
+
+	if entry.CoreId == CORE_0 {
+		callStackToUse = &p.core0FuncCallStack
+	} else {
+		callStackToUse = &p.core1FuncCallStack
+	}
+
+
 	formattedFuncEntry := FormattedCompletedFunctionCall{
 		FormattedTraceFunctionGeneralEntry: FormattedTraceFunctionGeneralEntry{
 			TraceType: FLAME_GRAPH_ENTRY,
@@ -289,18 +302,18 @@ func (p *Processor) processEntry(entry *TraceFunctionEnterEntry) {
 		PacketId: xid.New().String(),
 		StartTime: strconv.FormatInt(funcStartTime, 10),
 		ChildFunctionIds: nil,
-		Depth: uint32(len(p.funcCallStack)) + 1,
+		Depth: uint32(len(*callStackToUse)) + 1,
 	}
 
-	if len(p.funcCallStack) != 0 {
+	if len(*callStackToUse) != 0 {
 		// if there are currently entries on the function call stack, populate the child fields with that information
-		formattedFuncEntry.ParentFunctionId = p.funcCallStack[len(p.funcCallStack) - 1]
+		formattedFuncEntry.ParentFunctionId = (*callStackToUse)[len(*callStackToUse) - 1]
 		p.activeFuncionCalls[formattedFuncEntry.ParentFunctionId].ChildFunctionIds = append(p.activeFuncionCalls[formattedFuncEntry.ParentFunctionId].ChildFunctionIds, entry.FuncNumId)
 	} else {
 		formattedFuncEntry.ParentFunctionId = 0
 	}
 
-	p.funcCallStack = append(p.funcCallStack, entry.FuncNumId)
+	*callStackToUse = append(*callStackToUse, entry.FuncNumId)
 
 	p.activeFuncionCalls[entry.FuncNumId] = &formattedFuncEntry
 }
@@ -330,13 +343,23 @@ func (p *Processor) processExit(entry *TraceFunctionExitEntry) {
 
 		p.statTracker.AddStats(record)
 
-		if p.funcCallStack[len(p.activeFuncionCalls) - 1] != entry.FuncNumId {
+		var callStackToUse *[]uint32
+
+		if record.CoreId == 0 {
+			callStackToUse = &p.core0FuncCallStack
+		} else {
+			callStackToUse = &p.core1FuncCallStack
+		}
+
+		lastIdx := len(*callStackToUse) - 1
+
+		if (*callStackToUse)[lastIdx] != entry.FuncNumId {
 			// TODO: this is likely an error with the baudrate not being able to keep up with the data rate
 			// I do think that trying to use WiFi might help
 			fmt.Fprintf(os.Stderr, "Last active function call is not the same as current active function call")
 		}
 		// pop the last entry
-		p.funcCallStack = p.funcCallStack[:len(p.activeFuncionCalls) - 1]
+		*callStackToUse = (*callStackToUse)[:len(*callStackToUse) - 1]
 
 		delete(p.activeFuncionCalls, entry.FuncNumId)
 	}
