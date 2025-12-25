@@ -17,6 +17,8 @@ const ROW_HEIGHT = 40;
 const Y_OFFSET = 20;
 const GAP_THRESHOLD_MULTIPLIER = 5;
 const AXIS_HEIGHT = 30;
+// Reserve left area for core label and other UI
+const CORE_LABEL_MARGIN = 40;
 
 export default function RTExecutionFlameGraph({
     traces,
@@ -27,6 +29,7 @@ export default function RTExecutionFlameGraph({
     // Two separate canvas refs
     const graphCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const uiCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const coreLabelCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
     // Data Refs
     const latestTracesRef = useRef<TraceEntryCallStack[]>(traces);
@@ -37,6 +40,7 @@ export default function RTExecutionFlameGraph({
     // animation frameIds
     const timerAnimationRef = useRef<number | null>(null);
     const flameGraphAnimationRef = useRef<number | null>(null);
+    const coreLabelAnimationRef = useRef<number | null>(null);
 
     // hover map
     const drawnShapeMap = useRef<Map<string, TraceEntryCallStack>>(new Map());
@@ -82,6 +86,7 @@ export default function RTExecutionFlameGraph({
 
                 resizeCanvas(graphCanvasRef.current);
                 resizeCanvas(uiCanvasRef.current);
+                resizeCanvas(coreLabelCanvasRef.current);
             }
         });
 
@@ -131,7 +136,6 @@ export default function RTExecutionFlameGraph({
             if (width > 0) {
                 ctx.fillText(`Time since start: ${elapsed} ms`, width - 10, 5);
             }
-            ctx.restore();
 
             timerAnimationRef.current = requestAnimationFrame(renderUI);
         };
@@ -141,6 +145,45 @@ export default function RTExecutionFlameGraph({
             if (timerAnimationRef.current) {
                 cancelAnimationFrame(timerAnimationRef.current!);
                 timerAnimationRef.current = null;
+            }
+        };
+    }, [connected]);
+
+    useEffect(() => {
+        const canvas = coreLabelCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        const renderUI = () => {
+            const { width, height } = dimensionsRef.current;
+            const dpr = window.devicePixelRatio || 1;
+
+            // 1. Reset Transform & Clear
+            // We reset to identity matrix to clear the full physical canvas safely
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 2. Apply High DPI Scale
+            // All subsequent drawing commands will now use Logical Pixels
+            ctx.scale(dpr, dpr);
+
+            ctx.save();
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "bold 10px monospace";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "top";
+            ctx.fillText("Core 1", 5, height / 2);
+            ctx.restore();
+
+            coreLabelAnimationRef.current = requestAnimationFrame(renderUI);
+        };
+
+        renderUI();
+        return () => {
+            if (coreLabelAnimationRef.current) {
+                cancelAnimationFrame(coreLabelAnimationRef.current!);
+                coreLabelAnimationRef.current = null;
             }
         };
     }, [connected]);
@@ -224,7 +267,8 @@ export default function RTExecutionFlameGraph({
             );
             const renderStart =
                 minStart - BigInt(Math.floor(renderWindow * 0.05));
-            const xDiv = width / renderWindow;
+            const usableWidth = Math.max(0, width - CORE_LABEL_MARGIN);
+            const xDiv = usableWidth / renderWindow;
 
             // 5. Render Bars
             const renderMap = new Map();
@@ -232,10 +276,12 @@ export default function RTExecutionFlameGraph({
                 const rectStart = Number(BigInt(rect.startTime) - renderStart);
                 const rectEnd = Number(BigInt(rect.endTime) - renderStart);
 
-                if (rectEnd < 0 || rectStart > width) return;
+                if (rectEnd < 0) return;
 
-                const x = rectStart * xDiv;
+                const x = CORE_LABEL_MARGIN + rectStart * xDiv;
                 const w = Math.max((rectEnd - rectStart) * xDiv, 1);
+                // Cull shapes that fall fully left of the margin or fully off the right edge
+                if (x + w < CORE_LABEL_MARGIN || x > width) return;
                 const y = Y_OFFSET + rect.depth * ROW_HEIGHT;
 
                 ctx.fillStyle = getColor(rect.funcName, rect.depth);
@@ -265,7 +311,7 @@ export default function RTExecutionFlameGraph({
             ctx.strokeStyle = "#444";
             ctx.lineWidth = 1; // 1 logical pixel = 2 physical pixels on Retina (crisp)
             ctx.beginPath();
-            ctx.moveTo(0, graphHeight);
+            ctx.moveTo(CORE_LABEL_MARGIN, graphHeight);
             ctx.lineTo(width, graphHeight);
             ctx.stroke();
 
@@ -276,7 +322,7 @@ export default function RTExecutionFlameGraph({
             ctx.textBaseline = "top";
             for (let i = 0; i <= NUM_TICKS; i++) {
                 const ratio = i / NUM_TICKS;
-                const x = width * ratio;
+                const x = CORE_LABEL_MARGIN + usableWidth * ratio;
                 const tickTime =
                     renderStart + BigInt(Math.floor(renderWindow * ratio));
                 const label = `${(tickTime / 1_000_000n) % 60n}.${(
@@ -352,6 +398,16 @@ export default function RTExecutionFlameGraph({
             />
             <canvas
                 ref={uiCanvasRef}
+                style={{
+                    display: "block",
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    pointerEvents: "none",
+                }}
+            />
+            <canvas
+                ref={coreLabelCanvasRef}
                 style={{
                     display: "block",
                     position: "absolute",

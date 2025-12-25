@@ -153,10 +153,10 @@ function App() {
 
                 <main className="flex-1 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/60">
                     <div className="flex flex-col gap-4">
-                        {connected ? (
+                        {true ? (
                             <RTExecutionFlameGraph
                                 traces={flameGraphLogs}
-                                connected={connected}
+                                connected={true}
                             />
                         ) : (
                             <PlaybackFlameGraph traces={flameGraphLogs} />
