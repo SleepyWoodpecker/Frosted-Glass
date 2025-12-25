@@ -7,7 +7,6 @@ import (
 	"math"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 	"unsafe"
 
@@ -189,19 +188,15 @@ func (p *Processor) Process() {
 	case ENTER:
 		entry := TraceFunctionEnterEntry{}
 		if err := binary.Read(streamReader, binary.LittleEndian, &entry); err != nil {
-			if !strings.Contains(err.Error(), "EOF") {
-				fmt.Printf("Error reading ENTER entry: %v\n", err)
-				return
-			}
+			fmt.Printf("Error reading ENTER entry: %v\n", err)
+			return
 		}
 		p.processEntry(&entry)
 	case EXIT:
 		entry := TraceFunctionExitEntry{}
 		if err := binary.Read(streamReader, binary.LittleEndian, &entry); err != nil {
-			if !strings.Contains(err.Error(), "EOF") {
-				fmt.Printf("Error reading EXIT entry: %v\n", err)
-				return
-			}
+			fmt.Printf("Error reading EXIT entry: %v\n", err)
+			return
 		}
 		p.processExit(&entry)
 	case PANIC:
@@ -286,8 +281,6 @@ func (p *Processor) processEntry(entry *TraceFunctionEnterEntry) {
 	} else {
 		callStackToUse = &p.core1FuncCallStack
 	}
-
-	fmt.Println(callStackToUse)
 
 
 	formattedFuncEntry := FormattedCompletedFunctionCall{
@@ -393,6 +386,11 @@ func (p *Processor) processRestart(entry *TraceFunctionRestartEntry) {
 		Timestamp: strconv.FormatInt(p.timeKeeper.GetTimestampToSend(entry.Timestamp), 10),
 	}
 	p.SocketManager.Broadcast(dataToSend)
+
+	// drain the queue
+	for len(p.MessageQueue) > 0 {
+		<-p.MessageQueue
+	}
 
 	p.activeFuncionCalls = make(map[uint32]*FormattedCompletedFunctionCall)
 	p.core0FuncCallStack = make([]uint32, 0)
