@@ -156,12 +156,11 @@ function App() {
                     </div>
                 </header>
 
-                <main className="flex-1 overflow-hidden rounded-lg  bg-slate-900/60 flex flex-col gap-1">
+                <main className="flex-1 overflow-hidden rounded-lg  bg-slate-900/60 flex flex-col gap-4">
                     <FlameGraphCoreOptions
                         selectedOption={traceToDisplay}
                         setOption={setTraceToDisplay}
                         availableOptions={["Core 0", "Core 1", "Both"]}
-                        className="mt-1"
                     />
                     <div className="flex flex-col gap-4">
                         {connected ? (
