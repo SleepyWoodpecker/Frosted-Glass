@@ -7,6 +7,7 @@ import {
 import type { TraceEntryCallStack } from "../../../types";
 import { getColor } from "../../../util";
 import Tooltip from "../../atoms/Tooltip";
+import FlameGraphCoreOptions from "../../atoms/FlameGraphCoreOptions";
 
 interface ExecutionFlameGraphProps {
     traces: TraceEntryCallStack[];
@@ -47,9 +48,12 @@ export default function RTExecutionFlameGraph({
     const [inspectedFunction, setInspectedFunction] =
         useState<TraceEntryCallStack | null>(null);
 
+    const [traceToDisplay, setTraceToDisplay] = useState<
+        "Core 0" | "Core 1" | "Both"
+    >("Both");
+
     // 1. Sync Data
     useEffect(() => {
-        latestTracesRef.current = traces;
         if (!traceStartTimeRef.current && traces.length > 0) {
             let min = BigInt(traces[0].startTime);
             traces.forEach((t) => {
@@ -58,14 +62,25 @@ export default function RTExecutionFlameGraph({
             });
             traceStartTimeRef.current = min;
         }
-        if (traces.length > 0) {
+    }, [traces]);
+
+    useEffect(() => {
+        if (traceToDisplay === "Both") {
+            latestTracesRef.current = traces;
+        } else if (traceToDisplay === "Core 0") {
+            latestTracesRef.current = traces.filter((t) => t.coreId === 0);
+        } else {
+            latestTracesRef.current = traces.filter((t) => t.coreId === 1);
+        }
+
+        if (latestTracesRef.current.length > 0) {
             const coreNumberSet: Set<number> = new Set();
-            traces.forEach((t) => coreNumberSet.add(t.coreId));
+            latestTracesRef.current.forEach((t) => coreNumberSet.add(t.coreId));
             coreNumbersPresent.current = Array.from(coreNumberSet).sort(
                 (a, b) => a - b
             );
         }
-    }, [traces]);
+    }, [traces, traceToDisplay]);
 
     // 2. Resize Observer (Resizes BOTH canvases for High DPI)
     useEffect(() => {
@@ -424,49 +439,59 @@ export default function RTExecutionFlameGraph({
     };
 
     return (
-        <div
-            ref={containerRef}
-            style={{
-                position: "relative",
-                width: "100%",
-                height: "100%",
-                minHeight: "400px",
-                backgroundColor: "#1e1e1e",
-            }}
-        >
-            <canvas
-                ref={graphCanvasRef}
+        <div className="flex flex-col p-2 px-0 gap-1">
+            <div className="p-2">
+                <FlameGraphCoreOptions
+                    selectedOption={traceToDisplay}
+                    setOption={setTraceToDisplay}
+                    availableOptions={["Core 0", "Core 1", "Both"]}
+                />
+            </div>
+            <div
+                ref={containerRef}
                 style={{
-                    display: "block",
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
+                    position: "relative",
+                    width: "100%",
+                    height: "100%",
+                    minHeight: "400px",
+                    backgroundColor: "#1e1e1e",
                 }}
-                onMouseMove={handleMouseMove}
-            />
-            <canvas
-                ref={uiCanvasRef}
-                style={{
-                    display: "block",
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    pointerEvents: "none",
-                }}
-            />
-            <canvas
-                ref={coreLabelCanvasRef}
-                style={{
-                    display: "block",
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    pointerEvents: "none",
-                }}
-            />
-            {inspectedFunction && (
-                <Tooltip inspectedFunction={inspectedFunction} />
-            )}
+                className="border border-slate-800"
+            >
+                <canvas
+                    ref={graphCanvasRef}
+                    style={{
+                        display: "block",
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                    }}
+                    onMouseMove={handleMouseMove}
+                />
+                <canvas
+                    ref={uiCanvasRef}
+                    style={{
+                        display: "block",
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        pointerEvents: "none",
+                    }}
+                />
+                <canvas
+                    ref={coreLabelCanvasRef}
+                    style={{
+                        display: "block",
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        pointerEvents: "none",
+                    }}
+                />
+                {inspectedFunction && (
+                    <Tooltip inspectedFunction={inspectedFunction} />
+                )}
+            </div>
         </div>
     );
 }

@@ -151,7 +151,7 @@ function App() {
                     </div>
                 </header>
 
-                <main className="flex-1 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/60">
+                <main className="flex-1 overflow-hidden rounded-lg  bg-slate-900/60">
                     <div className="flex flex-col gap-4">
                         {true ? (
                             <RTExecutionFlameGraph
